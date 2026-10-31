@@ -1,0 +1,103 @@
+services:
+  api:
+    build: .
+    container_name: vision-api
+    environment:
+      PORT: 3000
+      DB_SYNC: "true"
+      JWT_PRIVATE_KEY_B64: ${JWT_PRIVATE_KEY_B64:-}
+      JWT_PUBLIC_KEY_B64: ${JWT_PUBLIC_KEY_B64:-}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-DemoPass123!}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-AdminPass123!}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-yolo_project}
+      DB_USER: ${POSTGRES_USER:-yolo_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      UPLOAD_DIR: /app/uploads
+      INFERENCE_URL: http://inference:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: vision-worker
+    command: ["node", "dist/worker.js"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-yolo_project}
+      DB_USER: ${POSTGRES_USER:-yolo_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      INFERENCE_URL: http://inference:8000
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_healthy
+
+  inference:
+    build:
+      context: .
+      dockerfile: Inference.Dockerfile
+    container_name: vision-inference
+    environment:
+      UPLOAD_DIR: /app/uploads
+      YOLO_MODEL: yolo11n.pt
+    volumes:
+      - uploads_data:/app/uploads
+      - model_cache:/root/.config/Ultralytics
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vision-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yolo_project}
+      POSTGRES_USER: ${POSTGRES_USER:-yolo_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: vision-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  model_cache:

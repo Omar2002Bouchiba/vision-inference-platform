@@ -1,0 +1,88 @@
+{
+  "info": {
+    "name": "Vision Inference Platform",
+    "description": "Course API examples. Log in first to populate userToken or adminToken. For uploads, select a local file in Postman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "datasetId", "value": "" },
+    { "key": "assetId", "value": "" },
+    { "key": "videoAssetId", "value": "" },
+    { "key": "processingId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+    },
+    {
+      "name": "Login as demo user",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('userToken', pm.response.json().accessToken);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"DemoPass123!\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/login" }
+    },
+    {
+      "name": "Login as admin",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('adminToken', pm.response.json().accessToken);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"AdminPass123!\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/auth/login" }
+    },
+    {
+      "name": "Get credit balance",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/credits/balance" }
+    },
+    {
+      "name": "Create dataset",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('datasetId', pm.response.json().id);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Demo dataset\",\n  \"tags\": [\"demo\", \"objects\"]\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/datasets" }
+    },
+    {
+      "name": "List datasets",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/datasets" }
+    },
+    {
+      "name": "Update dataset",
+      "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Demo dataset renamed\",\n  \"tags\": [\"demo\", \"updated\"]\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/datasets/{{datasetId}}" }
+    },
+    {
+      "name": "Upload image (select file in Postman)",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('assetId', pm.response.json().id);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/datasets/{{datasetId}}/assets/images" }
+    },
+    {
+      "name": "Upload MP4 (select file in Postman)",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('videoAssetId', pm.response.json().id);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/datasets/{{datasetId}}/assets/videos" }
+    },
+    {
+      "name": "List dataset assets",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/datasets/{{datasetId}}/assets" }
+    },
+    {
+      "name": "Start YOLO11n inference",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('processingId', pm.response.json().processingId);"], "type": "text/javascript" } }],
+      "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"modelId\": \"yolo11n\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/datasets/{{datasetId}}/inferences" }
+    },
+    {
+      "name": "Check processing status and results",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}" }
+    },
+    {
+      "name": "Get image/frame 0 side-by-side",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}/assets/{{assetId}}/frames/0" }
+    },
+    {
+      "name": "Get video/frame 0 side-by-side",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}/assets/{{videoAssetId}}/frames/0" }
+    },
+    {
+      "name": "Admin top up demo user",
+      "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@example.com\",\n  \"amount\": 50\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/credits/top-up" }
+    },
+    {
+      "name": "Logically delete dataset",
+      "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/datasets/{{datasetId}}" }
+    }
+  ]
+}

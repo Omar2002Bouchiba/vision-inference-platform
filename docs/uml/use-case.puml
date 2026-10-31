@@ -1,0 +1,24 @@
+@startuml
+left to right direction
+actor User
+actor Admin
+Admin --|> User
+rectangle "Vision Inference Platform" {
+  usecase "Log in with JWT" as UC1
+  usecase "View credit balance" as UC2
+  usecase "Create, list, update,\nand delete datasets" as UC3
+  usecase "Upload image or MP4" as UC4
+  usecase "Run YOLO inference" as UC5
+  usecase "Check job status\nand JSON results" as UC6
+  usecase "Retrieve original and\nannotated frame image" as UC7
+  usecase "Top up a user's credits" as UC8
+}
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC7
+Admin --> UC8
+@enduml

@@ -1,0 +1,39 @@
+@startuml
+actor User
+participant "Express API" as API
+participant "JWT/Credit Middleware" as MW
+database PostgreSQL as DB
+participant Bull
+participant "Node Worker" as Worker
+participant "Python YOLO Service" as YOLO
+
+User -> API: POST /datasets/{id}/inferences
+API -> MW: Verify JWT and current credit
+MW -> DB: Read user balance
+DB --> MW: User and balance
+MW --> API: Authorized
+API -> YOLO: POST /probe (media paths)
+YOLO --> API: Frame counts
+API -> DB: Transaction: reserve cost, save job
+DB --> API: PENDING or ABORTED
+alt insufficient credit
+  API --> User: 202 {processingId, ABORTED}
+else enough credit
+  API -> Bull: Enqueue inference job
+  API --> User: 202 {processingId, PENDING}
+  Bull -> Worker: Deliver job
+  Worker -> DB: Set RUNNING
+  Worker -> YOLO: POST /infer (YOLO11n)
+  YOLO --> Worker: detections and annotated frame paths
+  Worker -> DB: Save JSON, set COMPLETED
+  User -> API: GET /processings/{id}
+  API -> DB: Read job and result
+  DB --> API: COMPLETED + JSON
+  API --> User: Status and detection JSON
+  User -> API: GET /processings/{id}/assets/{asset}/frames/{n}
+  API -> DB: Read media and annotated frame path
+  API -> YOLO: POST /frame
+  YOLO --> API: Side-by-side JPEG
+  API --> User: Original + annotated frame
+end
+@enduml
