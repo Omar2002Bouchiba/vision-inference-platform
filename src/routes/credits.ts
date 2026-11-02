@@ -5,17 +5,24 @@ import { asyncHandler, requireAdmin, requireAuth, requireCredit } from '../middl
 import { CreditTransaction, User } from '../models';
 
 const router = Router();
+const creditAmountSchema = z.number().positive().max(1_000_000).refine((value) => Number.isInteger(value * 10_000), 'Credit amount supports at most four decimal places.');
 const topUpSchema = z.object({
   email: z.email().transform((value) => value.toLowerCase()),
-  amount: z.number().positive().max(1_000_000).refine((value) => Number.isInteger(value * 10_000), 'Credit amount supports at most four decimal places.'),
-});
+  amount: creditAmountSchema.optional(),
+  credit: creditAmountSchema.optional(),
+  newCredit: creditAmountSchema.optional(),
+}).refine((input) => [input.amount, input.credit, input.newCredit].filter((value) => value !== undefined).length === 1, {
+  path: ['amount'],
+  message: 'Provide exactly one of amount, credit, or newCredit.',
+}).transform((input) => ({ email: input.email, amount: input.amount ?? input.credit ?? input.newCredit! }));
 
 router.get('/balance', requireAuth, requireCredit, asyncHandler(async (req, res) => {
   const user = await User.findByPk(req.auth!.id, { attributes: ['creditBalance'] });
   res.json({ balance: Number(user?.creditBalance ?? 0) });
 }));
 
-router.post('/top-up', requireAuth, requireCredit, requireAdmin, asyncHandler(async (req, res) => {
+// Admins must be able to restore a user's credits even if the admin's own balance is zero.
+router.post('/top-up', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const input = topUpSchema.parse(req.body);
   const updated = await sequelize.transaction(async (transaction) => {
     // Keep the balance update and its audit-ledger entry atomic under concurrent top-ups.

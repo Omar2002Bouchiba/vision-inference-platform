@@ -7,6 +7,7 @@
     "dev": "ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "setup:env": "node scripts/generate-rsa-keys.cjs",
     "seed": "node dist/seed.js",
     "test": "npm run build && jest --runInBand"
   },

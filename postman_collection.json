@@ -69,6 +69,10 @@
       "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}" }
     },
     {
+      "name": "Get frame 0 side-by-side (single media)",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}/frames/0" }
+    },
+    {
       "name": "Get image/frame 0 side-by-side",
       "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/processings/{{processingId}}/assets/{{assetId}}/frames/0" }
     },

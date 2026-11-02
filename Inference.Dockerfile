@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir --default-timeout=1000 --retries=10 \
     --index-url https://download.pytorch.org/whl/cpu torch torchvision
 RUN pip install --no-cache-dir --default-timeout=1000 --retries=10 -r requirements.txt
 COPY inference/app.py ./app.py
+COPY inference/generate_sample_media.py ./generate_sample_media.py
 ENV UPLOAD_DIR=/app/uploads
 ENV YOLO_MODEL=yolo11n.pt
 EXPOSE 8000

@@ -3,11 +3,23 @@ const path = require('node:path');
 const { generateKeyPairSync } = require('node:crypto');
 
 const envPath = path.resolve(__dirname, '..', '.env');
+const examplePath = path.resolve(__dirname, '..', '.env.example');
 if (!fs.existsSync(envPath)) {
-  console.error('Copy .env.example to .env first.');
-  process.exit(1);
+  if (!fs.existsSync(examplePath)) {
+    console.error('.env.example is missing; cannot create the local environment file.');
+    process.exit(1);
+  }
+  fs.copyFileSync(examplePath, envPath);
+  console.log('Created .env from .env.example.');
 }
 const existing = fs.readFileSync(envPath, 'utf8').replace(/\r?\n/g, '\n');
+const privateKeyValue = existing.match(/^JWT_PRIVATE_KEY_B64=(.*)$/m)?.[1]?.trim();
+const publicKeyValue = existing.match(/^JWT_PUBLIC_KEY_B64=(.*)$/m)?.[1]?.trim();
+if (privateKeyValue && publicKeyValue) {
+  console.log('RS256 keys already exist in .env; keeping them unchanged.');
+  process.exit(0);
+}
+
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' },

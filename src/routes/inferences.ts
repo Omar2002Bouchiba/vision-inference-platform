@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import { sequelize } from '../config/database';
 import { asyncHandler, requireAuth, requireCredit, validateUuidParam } from '../middleware/http';
@@ -118,7 +118,7 @@ router.get('/processings/:processingId', requireAuth, requireCredit, asyncHandle
   res.json(response);
 }));
 
-router.get('/processings/:processingId/assets/:assetId/frames/:frameNumber', requireAuth, requireCredit, asyncHandler(async (req, res) => {
+async function sendFrameImage(req: Request, res: Response, requestedAssetId?: string): Promise<void> {
   const frameNumber = Number(req.params.frameNumber);
   if (!Number.isInteger(frameNumber) || frameNumber < 0) {
     res.status(400).json({ error: 'Frame number must be a non-negative integer.' });
@@ -133,9 +133,14 @@ router.get('/processings/:processingId/assets/:assetId/frames/:frameNumber', req
     res.status(409).json({ error: 'Frame images are available only after a completed processing job.' });
     return;
   }
-  const asset = await MediaAsset.findOne({ where: { id: req.params.assetId, datasetId: inferenceJob.datasetId } });
   const result = inferenceJob.result as unknown as InferenceResult;
-  const frame = result.frames.find((item) => item.assetId === req.params.assetId && item.frameNumber === frameNumber);
+  const candidates = result.frames.filter((item) => item.frameNumber === frameNumber && (!requestedAssetId || item.assetId === requestedAssetId));
+  if (!requestedAssetId && candidates.length > 1) {
+    res.status(409).json({ error: 'Frame number matches multiple media assets. Specify assetId in the asset-specific frame route.' });
+    return;
+  }
+  const frame = candidates[0];
+  const asset = frame ? await MediaAsset.findOne({ where: { id: frame.assetId, datasetId: inferenceJob.datasetId } }) : null;
   if (!asset || !frame) {
     res.status(404).json({ error: 'Requested frame was not found in this result.' });
     return;
@@ -146,6 +151,16 @@ router.get('/processings/:processingId/assets/:assetId/frames/:frameNumber', req
   } catch {
     res.status(502).json({ error: 'Could not create the side-by-side frame image.' });
   }
+}
+
+// The short route follows the exam wording when a frame number identifies one media item.
+router.get('/processings/:processingId/frames/:frameNumber', requireAuth, requireCredit, asyncHandler(async (req, res) => {
+  await sendFrameImage(req, res);
+}));
+
+// Keep the explicit route for datasets containing multiple media items with the same frame number.
+router.get('/processings/:processingId/assets/:assetId/frames/:frameNumber', requireAuth, requireCredit, asyncHandler(async (req, res) => {
+  await sendFrameImage(req, res, req.params.assetId);
 }));
 
 export default router;

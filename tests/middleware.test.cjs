@@ -8,8 +8,9 @@ const pair = generateKeyPairSync('rsa', {
 });
 process.env.JWT_PRIVATE_KEY_B64 = Buffer.from(pair.privateKey).toString('base64');
 process.env.JWT_PUBLIC_KEY_B64 = Buffer.from(pair.publicKey).toString('base64');
-const { requireAuth, requireAdmin, validateUuidParam, errorHandler } = require('../dist/middleware/http.js');
+const { requireAuth, requireAdmin, requireCredit, validateUuidParam, errorHandler } = require('../dist/middleware/http.js');
 const { InvalidMediaFileError } = require('../dist/services/asset-service.js');
+const { User } = require('../dist/models/index.js');
 
 function responseMock() {
   return {
@@ -85,5 +86,35 @@ describe('authentication and authorization middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(413);
     expect(res.json).toHaveBeenCalledWith({ error: 'Payload too large.' });
+  });
+});
+
+describe('credit middleware', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test('rejects an account with zero credits with HTTP 401', async () => {
+    jest.spyOn(User, 'findByPk').mockResolvedValue({ id: 'user-123', creditBalance: 0 });
+    const req = { auth: { id: 'user-123' } };
+    const res = responseMock();
+    const next = jest.fn();
+
+    await requireCredit(req, res, next);
+
+    expect(User.findByPk).toHaveBeenCalledWith('user-123', { attributes: ['id', 'creditBalance'] });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'User credit is exhausted.' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('allows an account with positive credits', async () => {
+    jest.spyOn(User, 'findByPk').mockResolvedValue({ id: 'user-123', creditBalance: 0.25 });
+    const req = { auth: { id: 'user-123' } };
+    const res = responseMock();
+    const next = jest.fn();
+
+    await requireCredit(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
   });
 });
