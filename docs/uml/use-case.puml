@@ -1,24 +1,47 @@
 @startuml
+title Vision Inference Platform - Use Cases
 left to right direction
-actor User
-actor Admin
-Admin --|> User
-rectangle "Vision Inference Platform" {
-  usecase "Log in with JWT" as UC1
-  usecase "View credit balance" as UC2
-  usecase "Create, list, update,\nand delete datasets" as UC3
-  usecase "Upload image or MP4" as UC4
-  usecase "Run YOLO inference" as UC5
-  usecase "Check job status\nand JSON results" as UC6
-  usecase "Retrieve original and\nannotated frame image" as UC7
-  usecase "Top up a user's credits" as UC8
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor #F4F8FC
+  BorderColor #24527A
+  ArrowColor #24527A
 }
-User --> UC1
-User --> UC2
-User --> UC3
-User --> UC4
-User --> UC5
-User --> UC6
-User --> UC7
-Admin --> UC8
+
+actor Visitor
+actor "Authenticated user" as User
+actor Administrator as Admin
+
+User --|> Visitor
+Admin --|> User
+
+rectangle "Vision Inference Platform" {
+  usecase "Log in" as Login
+  usecase "View credit balance" as Balance
+  usecase "Create, list, view, update,\nand logically delete datasets" as Dataset
+  usecase "Upload image or MP4 video\nto an owned dataset" as Upload
+  usecase "Request YOLO11n inference" as Infer
+  usecase "Check processing status\nand JSON detections" as Status
+  usecase "Retrieve original and\nannotated image/frame" as Frame
+  usecase "Add credits to a user account" as TopUp
+}
+
+Visitor --> Login
+User --> Balance
+User --> Dataset
+User --> Upload
+User --> Infer
+User --> Status
+User --> Frame
+Admin --> TopUp
+note right of TopUp
+  Requires the admin role.
+  The administrator's own balance
+  is not required for this route.
+end note
+note bottom of Frame
+  Available only after the processing
+  has completed successfully.
+end note
 @enduml

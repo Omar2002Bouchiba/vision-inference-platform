@@ -1,39 +1,159 @@
 @startuml
-actor User
-participant "Express API" as API
-participant "JWT/Credit Middleware" as MW
-database PostgreSQL as DB
-participant Bull
-participant "Node Worker" as Worker
-participant "Python YOLO Service" as YOLO
+title Inference Request - Validation, Credit Reservation and Queueing
+autonumber
+hide footbox
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #24527A
+  LifeLineBorderColor #8AA5BF
+  LifeLineBackgroundColor #F7FAFC
+  ParticipantBorderColor #24527A
+  ParticipantBackgroundColor #EAF2F8
+  GroupBorderColor #7093B5
+  GroupBackgroundColor #F4F8FC
+}
 
-User -> API: POST /datasets/{id}/inferences
-API -> MW: Verify JWT and current credit
-MW -> DB: Read user balance
+actor Client
+participant "Express API\nPOST /datasets/{datasetId}/inferences" as API
+participant "Auth + credit\nmiddleware" as MW
+database "PostgreSQL\n(Sequelize)" as DB
+participant "Python inference\nservice" as Py
+queue "Bull queue\n(Redis)" as Bull
+
+Client -> API: POST request + Bearer JWT
+API -> MW: requireAuth, then requireCredit
+MW -> DB: Read current user balance
 DB --> MW: User and balance
-MW --> API: Authorized
-API -> YOLO: POST /probe (media paths)
-YOLO --> API: Frame counts
-API -> DB: Transaction: reserve cost, save job
-DB --> API: PENDING or ABORTED
-alt insufficient credit
-  API --> User: 202 {processingId, ABORTED}
-else enough credit
-  API -> Bull: Enqueue inference job
-  API --> User: 202 {processingId, PENDING}
-  Bull -> Worker: Deliver job
-  Worker -> DB: Set RUNNING
-  Worker -> YOLO: POST /infer (YOLO11n)
-  YOLO --> Worker: detections and annotated frame paths
-  Worker -> DB: Save JSON, set COMPLETED
-  User -> API: GET /processings/{id}
-  API -> DB: Read job and result
-  DB --> API: COMPLETED + JSON
-  API --> User: Status and detection JSON
-  User -> API: GET /processings/{id}/assets/{asset}/frames/{n}
-  API -> DB: Read media and annotated frame path
-  API -> YOLO: POST /frame
-  YOLO --> API: Side-by-side JPEG
-  API --> User: Original + annotated frame
+alt Invalid JWT or zero balance
+  MW --> Client: 401 Unauthorized
+else Authenticated and balance is positive
+  MW --> API: Continue
+  API -> API: Validate modelId
+  API -> DB: Find active dataset owned by user
+  DB --> API: Dataset and media assets
+  alt Dataset missing
+    API --> Client: 404 Dataset not found
+  else Dataset has no media
+    API --> Client: 400 Add at least one image or video
+  else Dataset contains media
+    API -> Py: POST /probe (paths and media kinds)
+    note over API, Py: Invalid media returns 422; unavailable Python service returns 503.
+    Py --> API: Frame count for every asset
+    API -> API: Calculate full cost
+    group Transaction: lock balance, create job and reserve credits
+      API -> DB: Lock user row and compare balance with cost
+      alt Insufficient for full cost
+        API -> DB: Create ABORTED job; do not debit
+        DB --> API: Commit ABORTED job
+        API --> Client: 202 + processingId + ABORTED
+      else Sufficient for full cost
+        API -> DB: Deduct balance + INFERENCE ledger row + PENDING job
+        DB --> API: Commit reservation and PENDING job
+        API -> Bull: Add job using processingId as Bull job ID
+        alt Queue add fails
+          API -> DB: Refund balance + REFUND ledger row; mark job FAILED; commit
+          API --> Client: Error response
+        else Job queued
+          Bull --> API: Accepted
+          API --> Client: 202 + processingId + PENDING
+        end
+      end
+    end
+  end
+end
+@enduml
+
+@startuml
+title Worker Processing
+autonumber
+hide footbox
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #24527A
+  LifeLineBorderColor #8AA5BF
+  LifeLineBackgroundColor #F7FAFC
+  ParticipantBorderColor #24527A
+  ParticipantBackgroundColor #EAF2F8
+  GroupBorderColor #7093B5
+  GroupBackgroundColor #F4F8FC
+}
+
+queue "Bull queue\n(Redis)" as Bull
+participant "Node worker" as Worker
+database "PostgreSQL\n(Sequelize)" as DB
+participant "Python YOLO11n\nservice" as Py
+
+Bull -> Worker: Deliver inference job
+Worker -> DB: Load inference job
+DB --> Worker: Job record
+alt Job missing or already terminal
+  Worker -> Worker: Skip job
+else Job is runnable
+  Worker -> DB: Set RUNNING (progress 10)
+  Worker -> Py: POST /infer (jobId, modelId, assets)
+  alt Inference succeeds
+    Py --> Worker: Detection JSON + annotated-file paths
+    Worker -> DB: Save result; set COMPLETED (progress 100)
+  else Inference fails
+    Py --> Worker: Error
+    Worker -> DB: Set FAILED + errorType
+    Worker --> Bull: Throw error; configured attempts = 1
+  end
+end
+
+@enduml
+@startuml
+title Status and Frame Retrieval
+hide footbox
+autonumber
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #24527A
+  LifeLineBorderColor #8AA5BF
+  LifeLineBackgroundColor #F7FAFC
+  ParticipantBorderColor #24527A
+  ParticipantBackgroundColor #EAF2F8
+}
+
+actor Client
+participant "Express API" as API
+participant "Auth + credit\nmiddleware" as MW
+database "PostgreSQL\n(Sequelize)" as DB
+participant "Python inference\nservice" as Py
+
+== Poll job status ==
+Client -> API: GET /processings/{processingId} + JWT
+API -> MW: requireAuth then requireCredit
+MW -> DB: Read current user balance
+DB --> MW: User and balance
+alt Invalid token or zero balance
+  MW --> Client: 401 Unauthorized
+else Authenticated and balance is positive
+  MW --> API: Continue
+  API -> DB: Find job by processingId and ownerId
+  DB --> API: Status, progress, errorType, result
+  API --> Client: JSON; include detections only for COMPLETED
+end
+
+== Retrieve annotated image ==
+Client -> API: GET frame route + JWT
+API -> MW: requireAuth then requireCredit
+MW -> DB: Read current user balance
+DB --> MW: User and balance
+alt Invalid token or zero balance
+  MW --> Client: 401 Unauthorized
+else Authenticated and balance is positive
+  MW --> API: Continue
+  API -> DB: Find owned job and verify COMPLETED
+  DB --> API: Job result / annotated path
+  alt Job is not COMPLETED
+    API --> Client: 409 Frame available after completion only
+  else Frame is available
+    API -> DB: Find media asset in job dataset
+    DB --> API: Original asset path and kind
+    API -> Py: POST /frame (asset path, kind, frameNumber, annotatedFile)
+    Py --> API: Side-by-side JPEG bytes
+    API --> Client: image/jpeg
+  end
 end
 @enduml
