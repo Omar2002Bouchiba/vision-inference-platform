@@ -182,12 +182,12 @@ sequenceDiagram
       API-->>Client: 404 or 400 error
     else Dataset has media
       API->>Py: POST /probe (media paths and kinds)
-      Note over API,Py: Invalid media returns 422; unavailable service returns 503.
+
       Py-->>API: Frame count for each asset
       API->>API: Calculate full inference cost
-      API->>DB: Transaction: lock balance and create job
+      API->>DB: Lock balance and create job in a transaction
       alt Not enough for full inference cost
-        DB-->>API: ABORTED job; no credit debit
+        DB-->>API: ABORTED job with no credit debit
         API-->>Client: 202 + processingId + ABORTED
       else Enough credit
         API->>DB: Deduct credits, add ledger row, create PENDING job
@@ -204,7 +204,7 @@ sequenceDiagram
     end
   end
 ```
-Source: [inference-sequence.puml](./docs/uml/inference-sequence.puml), first diagram.
+If the probe rejects the media, the API returns `422`; if the Python service is unavailable, it returns `503`. Source: [inference-sequence.puml](./docs/uml/inference-sequence.puml), first diagram.
 
 ### 4.3 Worker Processing Sequence
 
@@ -230,7 +230,7 @@ sequenceDiagram
     else Inference fails
       Py-->>Worker: Error
       Worker->>DB: Set FAILED and errorType
-      Worker-->>Q: Reject job; configured attempts = 1
+      Worker-->>Q: Reject job, configured attempts = 1
     end
   end
 ```
@@ -256,7 +256,7 @@ sequenceDiagram
     Auth-->>API: Continue
     API->>DB: Find processing job owned by user
     DB-->>API: Status, progress, error, and result
-    API-->>Client: JSON; detections included only if COMPLETED
+    API-->>Client: JSON, detections included only if COMPLETED
   end
 
   Client->>API: GET frame route + JWT
@@ -300,7 +300,7 @@ classDiagram
     UUID id
     UUID ownerId
     string name
-    string[] tags
+    PostgresTextArray tags
     timestamp deletedAt
   }
   class MediaAsset {
